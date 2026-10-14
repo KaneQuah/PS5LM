@@ -169,10 +169,11 @@ done
 # shellcheck source=/dev/null
 source "$vk/tools/radv-link.sh"
 PS5_CLANG="$shim/clang" radv_link_recipe "$vk" "$sdk" "$archive" || exit 2
-# The platform's getaddrinfo always fails; ps5/app/compat_app.c has a numeric one.
+# The platform's getaddrinfo always fails; ps5/app/compat_app.c has a numeric one,
+# and a C-locale localeconv (the console's reports an empty decimal point).
 flags=()
 for f in "${radv_link_flags[@]}"; do
-    case $f in --defsym=getaddrinfo=*|--defsym=freeaddrinfo=*) ;; *) flags+=("$f") ;; esac
+    case $f in --defsym=getaddrinfo=*|--defsym=freeaddrinfo=*|--defsym=localeconv=*) ;; *) flags+=("$f") ;; esac
 done
 radv_link_flags=("${flags[@]}" --wrap=sceAgcInit)
 mapfile -t libs < <(find "$out/llama" -name '*.a' | sort)

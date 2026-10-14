@@ -6,10 +6,49 @@
  */
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <locale.h>
 #include <pwd.h>
 #include <stddef.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+/* The console's localeconv() reports an empty decimal point while its strtod
+ * reads '.' (PS5_Vulkan README and docs/RADV_PHASE.md). nlohmann::json asks
+ * localeconv() for the point, stores it in place of every '.' it scans, and
+ * strtod then stops at the empty byte: a request body with a fraction
+ * ("temperature": 0.6) fails GGML_ASSERT(endptr == ...) at json.hpp:8314.
+ * The C locale, with '.' as the point. PS5_Vulkan's radv-link.sh binds the
+ * same thing as ps5_localeconv when the pinned SDK has it; build-app.sh drops
+ * that binding so this one is the only definition. */
+struct lconv *localeconv(void) {
+    static struct lconv lc;
+    static char point[] = ".";
+    static char empty[] = "";
+    if (lc.decimal_point == NULL) {
+        memset(&lc, 0, sizeof(lc));
+        lc.decimal_point = point;
+        lc.thousands_sep = empty;
+        lc.grouping = empty;
+        lc.int_curr_symbol = empty;
+        lc.currency_symbol = empty;
+        lc.mon_decimal_point = empty;
+        lc.mon_thousands_sep = empty;
+        lc.mon_grouping = empty;
+        lc.positive_sign = empty;
+        lc.negative_sign = empty;
+        lc.int_frac_digits = CHAR_MAX;
+        lc.frac_digits = CHAR_MAX;
+        lc.p_cs_precedes = CHAR_MAX;
+        lc.p_sep_by_space = CHAR_MAX;
+        lc.n_cs_precedes = CHAR_MAX;
+        lc.n_sep_by_space = CHAR_MAX;
+        lc.p_sign_posn = CHAR_MAX;
+        lc.n_sign_posn = CHAR_MAX;
+    }
+    return &lc;
+}
 
 int execlp(const char *file, const char *arg, ...) {
     (void)file;
