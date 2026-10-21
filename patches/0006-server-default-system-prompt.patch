@@ -1,0 +1,81 @@
+PS5LM: -sys / -sysf work in llama-server: the system prompt they set is added to a chat request (Chat Completions, Responses, Anthropic) that has no system message of its own.
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 3f01b0259..857eaf1b0 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -1779,7 +1779,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+         [](common_params & params, const std::string & value) {
+             params.system_prompt = value;
+         }
+-    ).set_examples({LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_DIFFUSION, LLAMA_EXAMPLE_MTMD}));
++    ).set_examples({LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_DIFFUSION, LLAMA_EXAMPLE_MTMD, LLAMA_EXAMPLE_SERVER}));
+     add_opt(common_arg(
+         {"--perf"},
+         {"--no-perf"},
+@@ -1818,7 +1818,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+                 params.system_prompt.pop_back();
+             }
+         }
+-    ).set_examples({LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_DIFFUSION}));
++    ).set_examples({LLAMA_EXAMPLE_COMPLETION, LLAMA_EXAMPLE_CLI, LLAMA_EXAMPLE_DIFFUSION, LLAMA_EXAMPLE_SERVER}));
+     add_opt(common_arg(
+         {"--in-file"}, "FNAME",
+         "an input file (use comma-separated values to specify multiple files)",
+diff --git a/tools/server/server-common.cpp b/tools/server/server-common.cpp
+index 8cf794f1e..da738b536 100644
+--- a/tools/server/server-common.cpp
++++ b/tools/server/server-common.cpp
+@@ -1228,6 +1228,26 @@ json oaicompat_chat_params_parse(
+ {
+     json llama_params;
+ 
++    // PS5LM: the server's default system prompt (-sys, -sysf), for a request
++    // that carries none of its own. A client that sends a system message keeps
++    // it as it is.
++    if (!opt.system_prompt.empty() && body.contains("messages") && body.at("messages").is_array()) {
++        json & msgs = body.at("messages");
++        bool has_system = false;
++        for (const auto & m : msgs) {
++            const std::string r = json_value(m, "role", std::string());
++            has_system = has_system || r == "system" || r == "developer";
++        }
++        if (!has_system) {
++            json with_system = json::array();
++            with_system.push_back({ { "role", "system" }, { "content", opt.system_prompt } });
++            for (const auto & m : msgs) {
++                with_system.push_back(m);
++            }
++            body["messages"] = with_system;
++        }
++    }
++
+     auto tools = json_value(body, "tools", json());
+     auto has_tools = tools.is_array() && !tools.empty();
+     auto stream = json_value(body, "stream", false);
+diff --git a/tools/server/server-common.h b/tools/server/server-common.h
+index 8cb6b90da..05ba004c5 100644
+--- a/tools/server/server-common.h
++++ b/tools/server/server-common.h
+@@ -328,6 +328,7 @@ struct server_chat_params {
+     std::string reasoning_budget_message;
+     std::string media_path;
+     bool force_pure_content = false;
++    std::string system_prompt; // PS5LM: -sys / -sysf, used when a request has no system message
+ };
+ 
+ // used by /completions endpoint
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index 470fbd977..cde71af90 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -1486,7 +1486,8 @@ private:
+                 /* reasoning_budget      */ params_base.sampling.reasoning_budget_tokens,
+                 /* reasoning_budget_msg  */ params_base.sampling.reasoning_budget_message,
+                 /* media_path            */ params_base.media_path,
+-                /* force_pure_content    */ params_base.force_pure_content_parser
++                /* force_pure_content    */ params_base.force_pure_content_parser,
++                /* system_prompt         */ params_base.system_prompt
+             };
+ 
+             {

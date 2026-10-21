@@ -97,10 +97,23 @@ scalar path with q8_0 (`ggml-vulkan.cpp:15451-15498`, V).
 
 ## 5. System prompt, tools, prefix cache
 
-- No server-side system prompt flag. `-sys/-sysf` are not registered for the server and nothing in
-  `tools/server` reads `params.system_prompt` (V). No `settings.json` key or app field exists either
+- Stock llama.cpp has no server-side system prompt flag. `-sys/-sysf` are not registered for the server and nothing in
+  `tools/server` reads `params.system_prompt` (V); patch 0006 below adds it. No `settings.json` key or app field exists either
   (`settings.cpp:20-27`, V).
-- Server-side options that do work:
+- **Patch 0006 (this branch) adds the flag.** `-sys "text"` or `-sysf /data/PS5LM/system.txt` now work in
+  llama-server: the text is added as the first message of a Chat Completions, Responses, Anthropic or
+  `/apply-template` request that has no system or developer message. A client that sends its own system message
+  keeps it untouched, so agents that bring their own prompt are not affected and the default only reaches plain
+  chat clients and the web UI. Tested on a host build (V): patches 0001-0006 apply and `llama-server` compiles
+  on both pins (552f18f and v0.7.0, whose JSON type differs, which is why the patch builds a new array instead of
+  inserting); with a 115 KB random-weights GGUF and a chat template, `/apply-template` showed the default added
+  when absent and left out when the client sent one, and `/v1/messages` and `/v1/responses` input tokens grew by
+  the same amount; a float `temperature` body was accepted on the host. Not tested on the console. A ready chat
+  persona is `docs/system-prompt-chatbot.txt` (about 170 tokens, 1.7 s once at 102 tok/s; the prefix cache keeps it).
+  Use: copy that file to `/data/PS5LM/system.txt` and add the line `-sysf` and the line `/data/PS5LM/system.txt` to
+  `app-args.txt` (one argument per line). The file is read once at startup, so restart the app after editing it.
+  Without `app-args.txt` the planner does not pass it; an app hook that appends it when the file exists is the next step.
+- Options that work without the patch:
   1. `--chat-template-file /data/PS5LM/<name>.jinja`: a copy of the model's template with a fixed system text
      baked in. It applies to every endpoint and to the web UI (I for the recipe, not run). Mode "only when the
      client sent none": a client system message replaces the default. Mode "always": merged into one system
