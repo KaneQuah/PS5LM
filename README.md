@@ -4,7 +4,7 @@
 
 **llama.cpp on a jailbroken PlayStation 5, on its GPU.** A native app that runs GGUF language models on the console itself, with a dashboard on the TV, a model store, and a chat and OpenAI-compatible API for every device on your network.
 
-> **This is a fork.** PS5LM was created by **[Mert Cobanov](https://github.com/cobanov)** ([cobanov/PS5LM](https://github.com/cobanov/PS5LM), [ps5lm.cobanov.dev](https://ps5lm.cobanov.dev)): the llama.cpp port, the payload, its model library and the research all come from there. This fork, by me, adds the **native GPU app**, named PS5LM Plus to tell it apart from the original, offered back upstream in [cobanov/PS5LM#12](https://github.com/cobanov/PS5LM/pull/12). The original payload's README is kept in [docs/PAYLOAD.md](docs/PAYLOAD.md).
+> PS5LM Plus started as a fork of **PS5LM** by **[Mert Cobanov](https://github.com/cobanov)** ([cobanov/PS5LM](https://github.com/cobanov/PS5LM)): the llama.cpp port to the PS5, the payload and the early research come from there, and the project stays GPL-3.0 like the original. Since then it has grown separately around the native GPU app. The original payload's README is kept in [docs/PAYLOAD.md](docs/PAYLOAD.md).
 
 <p align="center">
   <img src="docs/media/app/dashboard-generating.jpg" width="820" alt="The PS5LM Plus dashboard on the TV while Qwen 3.8 27B generates at 20.9 tok/s">
@@ -12,7 +12,7 @@
 
 ## What it does
 
-A payload gets about 6 GiB of memory and no GPU. A native app (a title) gets the console's 12 GiB of direct memory and the GPU, so PS5LM Plus runs as one: llama-server with ggml's Vulkan backend on Mihawk-99's RADV port, in one 11.44 GiB device heap.
+A payload gets about 6 GiB of memory and no GPU. A native app (a title) gets the console's 12 GiB of direct memory and the GPU, so PS5LM Plus runs as one: llama-server with ggml's Vulkan backend on Mihawk-99's RADV port, in one 12 GiB device heap.
 
 | Model (on the PS5 GPU) | Context | Generation |
 |---|---|---|
@@ -81,12 +81,45 @@ ps5-exporter comes inside the app; you do not load it yourself.
 
 ## Install
 
-1. Download `ps5lm-app-vX.Y.Z.zip` from this fork's [releases](https://github.com/abhi245y/PS5LM/releases) and check it against its `.sha256`.
+1. Download `ps5lm-plus-vX.Y.Z.zip` from the [releases](https://github.com/abhi245y/PS5LM-Plus/releases) and check it against its `.sha256`.
 2. Unzip it and copy the `PPSA99581` folder to `/data/homebrew/PPSA99581` over FTP. ShadowMountPlus adds **PS5LM Plus** to the home screen.
-3. Start PS5LM. Pick a model in **Get models**, or copy a `.gguf` to `/data/PS5LM/models`, or to `PS5LM/models` on a USB drive (exFAT) or the M.2 drive.
+3. Start PS5LM. Pick a model in **Get models**, or copy a `.gguf` to `/data/PS5LM/models`, to `/data/homebrew/PPSA99581/models`, or to `PS5LM/models` on a USB drive (exFAT) or the M.2 drive.
 4. Choose the model in the library. Once the dashboard says Ready, open `http://<console IP>:8081` on a phone or computer.
 
 To update, close the app and copy the new `PPSA99581` folder over the old one. Settings, models and downloads stay in `/data/PS5LM`.
+
+A title sees only its own folder unless something opens the console's storage to it. On the console
+PS5LM is developed on (13.00), ShadowMountPlus v1.7-beta5fix1 does so before the title starts, with
+or without a HEN: its `debug.log` shows `[FAKELIB] directory mounted for PPSA99581: /data` (and
+`/mnt/usb0`). OnionHEN does so on request: PS5LM asks when it starts
+(`/download0/etahen_jailbreak`), which OnionHEN honours for a title on its app jailbreak allowlist,
+so add `PPSA99581` to `app_jailbreak.exact_title_ids` in `/data/OnionHEN/config.ini`.
+
+When storage stays closed, the first start says so, with the firmware, and asks which way to go:
+get full storage (a current ShadowMountPlus, or the OnionHEN allowlist) and open the app again, or
+go on in the app's own space. Then settings, the log and downloads stay in the app's own space,
+`/download0` (over FTP: `/mnt/sandbox/PPSA99581_000/download0/PS5LM`), whose size is
+`downloadDataSize` in `sce_sys/param.json`; models copied to `/data/homebrew/PPSA99581/models`
+load too. USB and M.2 drives stay out of reach. An update that raises `downloadDataSize` grows the
+space at the next start and keeps what is in it; lowering it frees nothing (tested on 13.00).
+Uninstalling the app deletes the models in both places, so update by copying the new folder over
+the old one.
+
+If something goes wrong, open **Settings > App > Debug report** and press Cross (the first time, a
+popup says what the report holds before it is saved). The app saves one
+text file with its logs, settings, firmware, storage route, drives, models and which payloads are
+listening, and shows where it went: `/data/PS5LM/debug/` over FTP, or
+`/mnt/sandbox/PPSA99581_000/download0/PS5LM/debug/` when the app runs in its own space. Attach it
+to an issue. It holds no prompts or tokens, but it does include the end of ShadowMountPlus's log,
+which lists the games and images it mounts. Read it before posting, or paste it into an LLM and ask
+it to point out anything personal, and remove what you would rather not share.
+
+**Kernel log in reports** (Settings > App, off by default) has the app collect the kernel log from
+the klogsrv payload (port 3232) from launch, keeping the last 1 MiB, and adds it to reports.
+klogsrv sends nothing from before a client connects, so turn it on, reproduce the problem, then
+save the report. The kernel log names other apps and services and can show network addresses and
+account IDs: turn it on only when asked for it; switching it on shows a popup that says so first.
+klogsrv sends every line to every client, so captures on a PC keep working while it is on.
 
 Which models fit is in [docs/MODELS.md](docs/MODELS.md); anything llama.cpp runs works if the library shows LOAD.
 
@@ -110,7 +143,7 @@ The full notes are in [docs/CONSOLE.md](docs/CONSOLE.md). In short:
 
 - **CPU first:** Qwen 3.8 27B ran as a payload on the Zen 2 CPU, streamed from disk at about a token a minute: proof that llama.cpp works on the console, and that the GPU was needed.
 - **A title, not a payload:** llama-server linked into an fSELF `eboot.bin` with a clean-room `libc.prx`, registered through ShadowMountPlus. Titles may not `exit()`, have some libc imports resolve to nothing, and need a working `getaddrinfo`, `accept4` and `HOME`; each was found by a crash.
-- **The GPU:** ggml-vulkan on [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan)'s RADV with no Vulkan loader, and RADV's unified heap for 11.44 GiB in one heap.
+- **The GPU:** ggml-vulkan on [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan)'s RADV with no Vulkan loader, and RADV's unified heap for the whole 12 GiB in one heap.
 - **The screen:** [ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui) through ps5-opengl, in the same process as RADV (the two Mesa builds share 4,399 symbol names, so the GL stack is linked with only its API visible).
 - **Switching models:** unloading in place leaves about 5 GiB of the pool held, so the app restarts itself for each switch.
 - **HTTPS:** downloads use the system's own libSceHttp2 and libSceSsl, so the app carries no TLS library or certificates.
@@ -121,11 +154,11 @@ The full notes are in [docs/CONSOLE.md](docs/CONSOLE.md). In short:
 The app links llama.cpp with ggml-vulkan against [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan)'s RADV build. Set up PS5_Vulkan and its forks in `.deps/src` (`PS5_Vulkan`, `PS5_Mesa` and `PS5_PayloadSDK` at the revisions PS5_Vulkan pins), then:
 
 ```sh
-git clone --recursive https://github.com/abhi245y/PS5LM
+git clone --recursive https://github.com/abhi245y/PS5LM-Plus
 cd PS5LM
 (cd .deps/src/PS5_Vulkan && tools/setup-native-dependencies.sh && tools/build-radv.sh release && make app)
 scripts/build-app.sh             # build/app-ps5/title/PPSA99581
-scripts/release-app.sh           # build/release/ps5lm-app-vX.Y.Z.zip and its .sha256
+scripts/release-app.sh           # build/release/ps5lm-plus-vX.Y.Z.zip and its .sha256
 ```
 
 From the PC, with the app on the console:
@@ -151,9 +184,8 @@ The app closes itself on request (`/data/PS5LM/quit`), so nothing is killed whil
 
 ## Versions and branches
 
-- Releases follow [semver](https://semver.org): tags `vX.Y.Z`, notes in [CHANGELOG.md](CHANGELOG.md), version set in `ps5/app/version.hpp` and shown on the dashboard. v0.1.x are upstream's payload releases.
-- `main` is this fork's integration branch. Each feature is built on its own branch (`feature/...`, `docs/...`) and merged into `main`.
-- `native-gpu-app` is the branch of the upstream pull request.
+- Releases follow [semver](https://semver.org): tags `vX.Y.Z`, notes in [CHANGELOG.md](CHANGELOG.md), version set in `ps5/app/version.hpp` and shown on the dashboard. v0.1.x are the original PS5LM payload releases, by Mert Cobanov.
+- `main` is the integration branch. Each feature is built on its own branch (`feature/...`, `docs/...`, `research/...`) and merged into `main`.
 
 ## Why llama.cpp
 
@@ -161,7 +193,7 @@ Earlier PS5 LLM work hand-writes GPU kernels for one model at a time. PS5LM port
 
 ## Credits
 
-- **[Mert Cobanov](https://github.com/cobanov)**, who created PS5LM ([cobanov/PS5LM](https://github.com/cobanov/PS5LM)): the llama.cpp port to the PS5, the payload and its library, the build scripts and the research this fork builds on.
+- **[Mert Cobanov](https://github.com/cobanov)**, who created PS5LM ([cobanov/PS5LM](https://github.com/cobanov/PS5LM)): the llama.cpp port to the PS5, the payload and its library, the build scripts and the research PS5LM Plus started from.
 - [llama.cpp / ggml](https://github.com/ggml-org/llama.cpp), which does the actual work.
 - [PS5_Vulkan](https://github.com/mihawk-99/PS5_Vulkan) (Mihawk-99) for RADV on the PS5, and [ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui), [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl) and ps5-homebrew-dev-protocol (BlackBearReloaded) for the app's screen and tooling.
 - [ps5-exporter](https://github.com/Marice/ps5-exporter) (Marice) for the sensors and drive space the app shows.
